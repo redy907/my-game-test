@@ -1,1 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono Blade - O Guardião do Tempo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-wrapper">
+        <div id="hud">
+            <div class="hud-box player-hud">
+                <div class="hud-title">CHRONO KNIGHT</div>
+                <div class="bar-container">
+                    <span class="bar-label">HP</span>
+                    <div class="bar-bg"><div id="player-hp" class="fill-hp"></div></div>
+                </div>
+                <div class="bar-container">
+                    <span class="bar-label">TEMPO</span>
+                    <div class="bar-bg"><div id="player-time" class="fill-time"></div></div>
+                </div>
+            </div>
 
+            <div class="hud-box boss-hud">
+                <div class="hud-title" id="boss-title">CHRONOS: O DEVORADOR <span id="boss-phase">[FASE 1]</span></div>
+                <div class="bar-container">
+                    <div class="bar-bg boss-bar-bg"><div id="boss-hp" class="fill-boss-hp"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="gameCanvas" width="800" height="450"></canvas>
+            
+            <div id="game-over-screen" class="overlay-screen hidden">
+                <h2>TEMPO ESGOTADO</h2>
+                <p>Pressione [R] para reiniciar a linha temporal</p>
+            </div>
+            
+            <div id="victory-screen" class="overlay-screen hidden">
+                <h2 class="victory-text">LINHA TEMPORAL SALVA</h2>
+                <p>Você derrotou Chronos!</p>
+            </div>
+        </div>
+
+        <div id="controls-bar">
+            <span><strong>[A / D]</strong> Mover</span>
+            <span><strong>[W / Espaço]</strong> Pular</span>
+            <span><strong>[Shift]</strong> Dash</span>
+            <span><strong>[J / Clique]</strong> Atacar</span>
+            <span><strong>[K]</strong> Câmera Lenta (Gasta Tempo)</span>
+            <span><strong>[R]</strong> Reiniciar</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
