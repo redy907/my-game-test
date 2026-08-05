@@ -1,0 +1,133 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', Courier, monospace;
+    user-select: none;
+}
+
+body {
+    background-color: #0b0b12;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#game-container {
+    width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* HUD & Barras de Vida */
+#hud {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    background: #151522;
+    padding: 12px;
+    border: 2px solid #3d3d5c;
+}
+
+.stat-container {
+    width: 45%;
+}
+
+.bar-border {
+    width: 100%;
+    height: 16px;
+    background: #2a2a3d;
+    border: 2px solid #000;
+    margin-top: 4px;
+}
+
+#player-hp-bar {
+    width: 100%;
+    height: 100%;
+    background: #2ecc71;
+    transition: width 0.1s;
+}
+
+.stamina #player-stamina-bar {
+    width: 100%;
+    height: 100%;
+    background: #f1c40f;
+    transition: width 0.1s;
+}
+
+#boss-hp-bar {
+    width: 100%;
+    height: 100%;
+    background: #e74c3c;
+    transition: width 0.1s;
+}
+
+/* Arena do Jogo */
+#screen {
+    width: 800px;
+    height: 400px;
+    background: #1a1a2e;
+    border: 4px solid #4a4e69;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Entidades em Pixel Art Simuladas */
+.entity {
+    position: absolute;
+    bottom: 20px;
+}
+
+#player {
+    width: 32px;
+    height: 48px;
+    background: #3498db;
+    left: 100px;
+    border: 2px solid #2980b9;
+}
+
+#boss {
+    width: 80px;
+    height: 120px;
+    background: #8e44ad;
+    right: 100px;
+    border: 2px solid #6c5ce7;
+    transition: background 0.3s;
+}
+
+/* Estados e Animações */
+.dash-active {
+    opacity: 0.5;
+    filter: drop-shadow(-10px 0 0 #00ffff);
+}
+
+.boss-p2 { background: #d35400 !important; }
+.boss-p3 { background: #2c3e50 !important; border-color: #e74c3c !important; }
+.boss-p4 { background: #c0392b !important; animation: pulse 0.5s infinite alternate; }
+
+@keyframes pulse {
+    from { transform: scale(1); }
+    to { transform: scale(1.05); }
+}
+
+#enrage-timer {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 32px;
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.hidden { display: none; }
+
+#controls-panel {
+    color: #a0a0b0;
+    font-size: 14px;
+}
