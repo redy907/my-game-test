@@ -1241,3 +1241,497 @@ function gameLoop() {
 }
 
 gameLoop();
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// HUD Elements
+const playerHpEl = document.getElementById('player-hp');
+const playerTimeEl = document.getElementById('player-time');
+const bossHpEl = document.getElementById('boss-hp');
+const bossPhaseEl = document.getElementById('boss-phase');
+const gameOverScreen = document.getElementById('game-over-screen');
+const victoryScreen = document.getElementById('victory-screen');
+
+const GROUND_Y = 380;
+const GRAVITY = 0.55;
+
+let timeScale = 1.0;
+let particles = [];
+let projectiles = [];
+let screenShake = 0;
+
+const keys = { a: false, d: false, w: false, space: false, shift: false, j: false, k: false, r: false };
+
+// ==========================================
+// 1. HERÓI: CHRONO KNIGHT
+// ==========================================
+class Player {
+    constructor() { this.reset(); }
+
+    reset() {
+        this.x = 100;
+        this.y = GROUND_Y - 48;
+        this.width = 32;
+        this.height = 48;
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 5;
+        this.jumpForce = -12;
+        this.isGrounded = true;
+
+        this.hp = 100;
+        this.maxHp = 100;
+        this.timeEnergy = 100;
+        this.maxTimeEnergy = 100;
+
+        this.facing = 1;
+        this.isDashing = false;
+        this.canDash = true;
+        this.isInvulnerable = false;
+        this.isStunned = false;
+        this.stunTimer = 0;
+
+        this.isAttacking = false;
+        this.attackCooldown = 0;
+        this.damage = 40;
+        this.ghosts = [];
+    }
+
+    update() {
+        if (this.hp <= 0) return;
+
+        // Efeito de Paralisia (Stun)
+        if (this.isStunned) {
+            this.stunTimer--;
+            if (this.stunTimer <= 0) this.isStunned = false;
+            return; // Impede movimentação
+        }
+
+        // Regeração de Energia do Tempo
+        if (!keys.k && this.timeEnergy < this.maxTimeEnergy) {
+            this.timeEnergy = Math.min(this.maxTimeEnergy, this.timeEnergy + 0.35);
+        }
+
+        // Habilidade: Câmera Lenta
+        if (keys.k && this.timeEnergy > 5) {
+            timeScale = 0.25; // Câmera ainda mais lenta
+            this.timeEnergy -= 0.8;
+            if (Math.random() < 0.3) {
+                particles.push({
+                    x: this.x + Math.random() * this.width,
+                    y: this.y + Math.random() * this.height,
+                    vx: 0, vy: -1, size: 2, color: '#00d2ff', life: 15
+                });
+            }
+        } else {
+            timeScale = 1.0;
+        }
+
+        // Dash Logic
+        if (this.isDashing) {
+            this.x += this.facing * 14;
+            this.ghosts.push({ x: this.x, y: this.y, alpha: 0.5 });
+        } else {
+            if (keys.a) { this.vx = -this.speed; this.facing = -1; }
+            else if (keys.d) { this.vx = this.speed; this.facing = 1; }
+            else { this.vx = 0; }
+
+            if ((keys.w || keys.space) && this.isGrounded) {
+                this.vy = this.jumpForce;
+                this.isGrounded = false;
+            }
+
+            if (keys.shift && this.canDash && this.timeEnergy >= 20) {
+                this.startDash();
+            }
+
+            if (keys.j && this.attackCooldown <= 0) {
+                this.startAttack();
+            }
+
+            this.vy += GRAVITY;
+            this.x += this.vx;
+            this.y += this.vy;
+
+            if (this.y >= GROUND_Y - this.height) {
+                this.y = GROUND_Y - this.height;
+                this.vy = 0;
+                this.isGrounded = true;
+            }
+
+            this.x = Math.max(10, Math.min(canvas.width - this.width - 10, this.x));
+        }
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        this.ghosts.forEach(g => g.alpha -= 0.1);
+        this.ghosts = this.ghosts.filter(g => g.alpha > 0);
+    }
+
+    startDash() {
+        this.isDashing = true;
+        this.canDash = false;
+        this.isInvulnerable = true;
+        this.timeEnergy -= 20;
+
+        setTimeout(() => {
+            this.isDashing = false;
+            this.isInvulnerable = false;
+        }, 200);
+
+        setTimeout(() => { this.canDash = true; }, 400);
+    }
+
+    startAttack() {
+        this.isAttacking = true;
+        this.attackCooldown = 15;
+
+        const hitBox = {
+            x: this.facing === 1 ? this.x + this.width : this.x - 50,
+            y: this.y,
+            width: 50,
+            height: this.height
+        };
+
+        if (checkAABB(hitBox, boss)) {
+            boss.takeDamage(this.damage);
+            screenShake = 5;
+        }
+
+        setTimeout(() => { this.isAttacking = false; }, 150);
+    }
+
+    applyStun(durationFrames) {
+        if (this.isInvulnerable) return;
+        this.isStunned = true;
+        this.stunTimer = durationFrames;
+        particles.push({ x: this.x + 16, y: this.y - 10, vx: 0, vy: -1, size: 8, color: '#00ffff', life: 40 });
+    }
+
+    takeDamage(dmg) {
+        if (this.isInvulnerable || this.hp <= 0) return;
+        this.hp = Math.max(0, this.hp - dmg);
+        screenShake = 12;
+        if (this.hp <= 0) gameOverScreen.classList.remove('hidden');
+    }
+
+    draw() {
+        this.ghosts.forEach(g => {
+            ctx.fillStyle = `rgba(0, 242, 254, ${g.alpha})`;
+            ctx.fillRect(g.x, g.y, this.width, this.height);
+        });
+
+        ctx.save();
+        ctx.fillStyle = this.isStunned ? '#00ffff' : (this.isInvulnerable ? '#00f2fe' : '#3a86ff');
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        ctx.fillStyle = '#00f2fe';
+        const eyeX = this.facing === 1 ? this.x + 20 : this.x + 4;
+        ctx.fillRect(eyeX, this.y + 10, 8, 4);
+
+        if (this.isAttacking) {
+            ctx.fillStyle = '#00f2fe';
+            const arcX = this.facing === 1 ? this.x + this.width : this.x - 40;
+            ctx.fillRect(arcX, this.y - 10, 40, this.height + 20);
+        }
+
+        ctx.restore();
+    }
+}
+
+// ==========================================
+// 2. BOSS: CHRONOS (NOVOS PODERES E ULTIMATE)
+// ==========================================
+class Boss {
+    constructor() { this.reset(); }
+
+    reset() {
+        this.width = 80;
+        this.height = 110;
+        this.x = 640;
+        this.y = GROUND_Y - this.height;
+        this.hp = 12000; // Vida máxima
+        this.maxHp = 12000;
+        this.phase = 1;
+        this.attackTimer = 0;
+        this.isAttacking = false;
+        this.isHealing = false;
+        this.healTimer = 0;
+
+        // Ultimate Super Nova
+        this.isChargingUltimate = false;
+        this.ultimateCharge = 0;
+    }
+
+    update() {
+        if (this.hp <= 0) return;
+
+        this.attackTimer += 1 * timeScale;
+
+        // Atualização de Fases
+        const hpPct = (this.hp / this.maxHp) * 100;
+        if (hpPct <= 20 && this.phase < 5) this.setPhase(5);
+        else if (hpPct <= 40 && this.phase < 4) this.setPhase(4);
+        else if (hpPct <= 60 && this.phase < 3) this.setPhase(3);
+        else if (hpPct <= 80 && this.phase < 2) this.setPhase(2);
+
+        // Habilidade Passiva: Regeneração Temporal (Fase 3+)
+        if (this.phase >= 3) {
+            this.healTimer++;
+            if (this.healTimer > 200 && !this.isAttacking) {
+                this.hp = Math.min(this.maxHp, this.hp + 12);
+                this.isHealing = true;
+                if (Math.random() < 0.2) {
+                    particles.push({
+                        x: this.x + Math.random() * this.width,
+                        y: this.y + Math.random() * this.height,
+                        vx: 0, vy: -2, size: 4, color: '#00ffaa', life: 20
+                    });
+                }
+            }
+        }
+
+        // Carregamento da ULTIMATE na Fase 5
+        if (this.isChargingUltimate) {
+            this.ultimateCharge += 1 * timeScale;
+            if (this.ultimateCharge >= 120) { // Dispara a explosão suprema
+                this.triggerSuperNova();
+                this.isChargingUltimate = false;
+                this.ultimateCharge = 0;
+            }
+            return;
+        }
+
+        const cooldowns = [0, 85, 65, 45, 30, 10];
+        const cooldown = cooldowns[this.phase];
+
+        if (this.attackTimer >= cooldown) {
+            this.executeAttack();
+            this.attackTimer = 0;
+        }
+
+        // Meteoros da Fase 5
+        if (this.phase === 5 && Math.random() < 0.2) {
+            projectiles.push({
+                x: player.x + (Math.random() - 0.5) * 100,
+                y: -10,
+                vx: 0,
+                vy: 8,
+                radius: 10,
+                color: '#ff0055'
+            });
+        }
+    }
+
+    setPhase(p) {
+        this.phase = p;
+        bossPhaseEl.innerText = p === 5 ? `[FASE 5: APOCALIPSE]` : `[FASE ${p}]`;
+        screenShake = 18;
+    }
+
+    executeAttack() {
+        this.isAttacking = true;
+        this.isHealing = false;
+        this.healTimer = 0;
+
+        // A cada 5 ataques na Fase 5, ativa a Super Nova
+        if (this.phase === 5 && Math.random() < 0.35 && !this.isChargingUltimate) {
+            this.isChargingUltimate = true;
+            return;
+        }
+
+        // PODER: Teletransporte Agressivo
+        if (this.phase >= 2) {
+            this.x = player.x + (Math.random() > 0.5 ? 100 : -120);
+            this.x = Math.max(50, Math.min(670, this.x));
+        }
+
+        // PODER: Raio de Paralisia Temporal (Fase 4+)
+        if (this.phase >= 4 && Math.random() < 0.4) {
+            projectiles.push({
+                x: this.x + this.width / 2,
+                y: this.y + 20,
+                vx: player.x > this.x ? 8 : -8,
+                vy: 0,
+                radius: 12,
+                isStunRay: true,
+                color: '#00ffff'
+            });
+        }
+
+        // PODER: Chuva de Agulhas Temporal
+        if (this.phase >= 3) {
+            for (let i = 0; i < 3; i++) {
+                projectiles.push({
+                    x: this.x + (i * 30) - 30,
+                    y: this.y - 20,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: 4,
+                    radius: 6,
+                    color: '#9900ff'
+                });
+            }
+        }
+
+        setTimeout(() => {
+            if (checkAABB({ x: this.x - 35, y: this.y, width: this.width + 70, height: this.height }, player)) {
+                player.takeDamage(15 + this.phase * 5);
+            }
+            screenShake = 8 + this.phase * 2;
+            this.isAttacking = false;
+        }, 250 * (1 / timeScale));
+    }
+
+    triggerSuperNova() {
+        screenShake = 35;
+        // Danifica massivamente a menos que o player esteja invulnerável no Dash
+        if (!player.isInvulnerable) {
+            player.takeDamage(90);
+        }
+    }
+
+    takeDamage(dmg) {
+        this.hp = Math.max(0, this.hp - dmg);
+        this.healTimer = 0; // Interrompe a regeneração quando atacado
+        this.isHealing = false;
+
+        if (this.hp <= 0) victoryScreen.classList.remove('hidden');
+    }
+
+    draw() {
+        ctx.save();
+        const colors = ['', '#ff0055', '#ff5500', '#9900ff', '#ff00aa', '#110022'];
+        let color = colors[this.phase];
+
+        ctx.fillStyle = color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        // Animação de Carga do Ataque Supremo (Super Nova)
+        if (this.isChargingUltimate) {
+            ctx.strokeStyle = '#ff0055';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.ultimateCharge * 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Aura de Cura
+        if (this.isHealing) {
+            ctx.strokeStyle = '#00ffaa';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(this.x - 5, this.y - 5, this.width + 10, this.height + 10);
+        }
+
+        // Núcleo
+        ctx.fillStyle = this.phase === 5 ? '#ff0000' : '#fff';
+        ctx.beginPath();
+        ctx.arc(this.x + this.width / 2, this.y + 40, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+// ==========================================
+// 3. PROJÉTEIS & COLISÕES
+// ==========================================
+function updateProjectiles() {
+    projectiles.forEach((p, index) => {
+        p.x += p.vx * timeScale;
+        p.y += p.vy * timeScale;
+
+        const dist = Math.hypot(p.x - (player.x + player.width / 2), p.y - (player.y + player.height / 2));
+        if (dist < p.radius + player.width / 2) {
+            if (p.isStunRay) {
+                player.applyStun(100); // 100 frames de Stun
+            } else {
+                player.takeDamage(20);
+            }
+            projectiles.splice(index, 1);
+        }
+    });
+
+    projectiles = projectiles.filter(p => (p.y < canvas.height && p.x > 0 && p.x < canvas.width));
+}
+
+function drawProjectiles() {
+    projectiles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function checkAABB(a, b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+const player = new Player();
+const boss = new Boss();
+
+// Input Listeners
+window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === ' ') keys.space = true;
+    else if (keys.hasOwnProperty(k)) keys[k] = true;
+    if (k === 'r') {
+        player.reset();
+        boss.reset();
+        projectiles = [];
+        gameOverScreen.classList.add('hidden');
+        victoryScreen.classList.add('hidden');
+    }
+});
+
+window.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === ' ') keys.space = false;
+    else if (keys.hasOwnProperty(k)) keys[k] = false;
+});
+
+window.addEventListener('mousedown', () => player.startAttack());
+
+function updateHUD() {
+    playerHpEl.style.width = `${(player.hp / player.maxHp) * 100}%`;
+    playerTimeEl.style.width = `${(player.timeEnergy / player.maxTimeEnergy) * 100}%`;
+    bossHpEl.style.width = `${(boss.hp / boss.maxHp) * 100}%`;
+}
+
+function gameLoop() {
+    ctx.save();
+
+    if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+        screenShake *= 0.85;
+    }
+
+    player.update();
+    boss.update();
+    updateProjectiles();
+    updateHUD();
+
+    ctx.fillStyle = boss.phase === 5 ? '#150008' : '#060612';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#1f1f3a';
+    ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+    boss.draw();
+    player.draw();
+    drawProjectiles();
+
+    particles.forEach(p => {
+        p.y += p.vy;
+        p.life--;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
+    particles = particles.filter(p => p.life > 0);
+
+    ctx.restore();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
