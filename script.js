@@ -1,7 +1,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
-
 // HUD
 const playerHpEl = document.getElementById('player-hp');
 const playerTimeEl = document.getElementById('player-time');
