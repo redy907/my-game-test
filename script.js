@@ -818,3 +818,4 @@ class Player {
         ctx.restore();
     }
 }
+const keys = { a: false, d: false, w: false, space: false, shift: false, j: false, k: false, l: false, i: false, r: false };
