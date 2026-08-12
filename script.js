@@ -529,3 +529,292 @@ function gameLoop() {
 }
 
 gameLoop();
+class Player {
+    constructor() { this.reset(); }
+
+    reset() {
+        this.x = 100;
+        this.y = GROUND_Y - 48;
+        this.width = 32;
+        this.height = 48;
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 5.5;
+        this.jumpForce = -12.5;
+        this.isGrounded = true;
+
+        this.hp = 100;
+        this.maxHp = 100;
+        this.energy = 100;
+        this.maxEnergy = 100;
+
+        this.facing = 1;
+        this.isDashing = false;
+        this.canDash = true;
+        this.isInvulnerable = false;
+        this.isStunned = false;
+        this.stunTimer = 0;
+
+        // NOVO: Sistema de Defesa e Parry
+        this.isBlocking = false;
+        this.parryWindow = 0; // Contagem regressiva para o tempo de Parry Perfeito
+
+        this.isAttacking = false;
+        this.attackCooldown = 0;
+        this.damage = 45;
+        this.ghosts = [];
+
+        // Carregamento do Poder Supremo
+        this.isChargingSuper = false;
+        this.superChargeTimer = 0;
+    }
+
+    update() {
+        if (this.hp <= 0) return;
+
+        if (this.isStunned) {
+            this.stunTimer--;
+            if (this.stunTimer <= 0) this.isStunned = false;
+            return;
+        }
+
+        // Atualiza a janela de Parry Perfeito
+        if (this.parryWindow > 0) this.parryWindow--;
+
+        // NOVO: Ativação da Defesa [I]
+        if (keys.i && !this.isDashing && !this.isChargingSuper) {
+            if (!this.isBlocking) {
+                this.isBlocking = true;
+                this.parryWindow = 12; // Primeiro 0.2s ativam o Parry Perfeito!
+            }
+            this.vx = 0; // Fica desacelerado/imóvel enquanto defende
+        } else {
+            this.isBlocking = false;
+            this.parryWindow = 0;
+        }
+
+        // Sistema de Carregamento do Poder Supremo [L]
+        if (keys.l && this.energy >= 80 && !this.isDashing && !this.isBlocking) {
+            this.isChargingSuper = true;
+            this.superChargeTimer += 1 * timeScale;
+            this.vx = 0;
+
+            if (Math.random() < 0.6) {
+                particles.push({
+                    x: this.x + 16 + (Math.random() - 0.5) * 60,
+                    y: this.y + 24 + (Math.random() - 0.5) * 60,
+                    vx: 0, vy: 0, size: 4, color: '#00ffff', life: 15
+                });
+            }
+
+            if (this.superChargeTimer >= 90) {
+                this.castSuperAttack();
+            }
+            return;
+        } else {
+            if (this.isChargingSuper && !keys.l) {
+                if (this.superChargeTimer >= 70) {
+                    this.castSuperAttack();
+                }
+                this.isChargingSuper = false;
+                this.superChargeTimer = 0;
+            }
+        }
+
+        // Regeração de Energia
+        if (!keys.k && !this.isBlocking && this.energy < this.maxEnergy) {
+            this.energy = Math.min(this.maxEnergy, this.energy + 0.4);
+        }
+
+        // Habilidade Slow Motion
+        if (keys.k && this.energy > 5 && !this.isBlocking) {
+            timeScale = 0.25;
+            this.energy -= 0.8;
+        } else {
+            timeScale = 1.0;
+        }
+
+        // Movimentação Normal
+        if (this.isDashing) {
+            this.x += this.facing * 15;
+            this.ghosts.push({ x: this.x, y: this.y, alpha: 0.5 });
+        } else if (!this.isBlocking) {
+            if (keys.a) { this.vx = -this.speed; this.facing = -1; }
+            else if (keys.d) { this.vx = this.speed; this.facing = 1; }
+            else { this.vx = 0; }
+
+            if ((keys.w || keys.space) && this.isGrounded) {
+                this.vy = this.jumpForce;
+                this.isGrounded = false;
+            }
+
+            if (keys.shift && this.canDash && this.energy >= 20) {
+                this.startDash();
+            }
+
+            if (keys.j && this.attackCooldown <= 0) {
+                this.startAttack();
+            }
+
+            this.vy += GRAVITY;
+            this.x += this.vx;
+            this.y += this.vy;
+
+            if (this.y >= GROUND_Y - this.height) {
+                this.y = GROUND_Y - this.height;
+                this.vy = 0;
+                this.isGrounded = true;
+            }
+
+            this.x = Math.max(10, Math.min(canvas.width - this.width - 10, this.x));
+        }
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        this.ghosts.forEach(g => g.alpha -= 0.1);
+        this.ghosts = this.ghosts.filter(g => g.alpha > 0);
+    }
+
+    startDash() {
+        this.isDashing = true;
+        this.canDash = false;
+        this.isInvulnerable = true;
+        this.energy -= 20;
+
+        setTimeout(() => {
+            this.isDashing = false;
+            this.isInvulnerable = false;
+        }, 200);
+
+        setTimeout(() => { this.canDash = true; }, 380);
+    }
+
+    startAttack() {
+        this.isAttacking = true;
+        this.attackCooldown = 14;
+
+        const hitBox = {
+            x: this.facing === 1 ? this.x + this.width : this.x - 55,
+            y: this.y - 10,
+            width: 55,
+            height: this.height + 20
+        };
+
+        if (checkAABB(hitBox, boss)) {
+            boss.takeDamage(this.damage);
+            screenShake = 6;
+        }
+
+        setTimeout(() => { this.isAttacking = false; }, 140);
+    }
+
+    castSuperAttack() {
+        this.energy -= 80;
+        this.isChargingSuper = false;
+        this.superChargeTimer = 0;
+        screenShake = 30;
+
+        projectiles = [];
+        boss.isShielded = false;
+        boss.takeDamage(1200);
+
+        for (let i = 0; i < 40; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const spd = 4 + Math.random() * 8;
+            particles.push({
+                x: this.x + 16,
+                y: this.y + 24,
+                vx: Math.cos(angle) * spd,
+                vy: Math.sin(angle) * spd,
+                size: 6,
+                color: '#00ffff',
+                life: 30
+            });
+        }
+    }
+
+    applyStun(duration) {
+        if (this.isInvulnerable || this.isBlocking) return;
+        this.isStunned = true;
+        this.stunTimer = duration;
+        particles.push({ x: this.x + 16, y: this.y - 10, vx: 0, vy: -1, size: 8, color: '#00ffff', life: 40 });
+    }
+
+    takeDamage(dmg) {
+        if (this.isInvulnerable || this.hp <= 0) return;
+
+        // PARRY PERFEITO!
+        if (this.isBlocking && this.parryWindow > 0) {
+            screenShake = 15;
+            this.energy = Math.min(this.maxEnergy, this.energy + 30); // Ganha energia
+            
+            // Efeito visual de Parry Perfeito
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: this.x + (this.facing === 1 ? 32 : -10),
+                    y: this.y + 20,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    size: 5,
+                    color: '#fff',
+                    life: 20
+                });
+            }
+            return; // Bloqueia 100% do dano!
+        }
+
+        // BLOQUEIO NORMAL
+        if (this.isBlocking) {
+            dmg = Math.floor(dmg * 0.2); // Reduz 80% do dano
+            screenShake = 4;
+        }
+
+        this.hp = Math.max(0, this.hp - dmg);
+        if (!this.isBlocking) screenShake = 12;
+
+        if (this.hp <= 0) gameOverScreen.classList.remove('hidden');
+    }
+
+    draw() {
+        this.ghosts.forEach(g => {
+            ctx.fillStyle = `rgba(0, 191, 255, ${g.alpha})`;
+            ctx.fillRect(g.x, g.y, this.width, this.height);
+        });
+
+        ctx.save();
+        ctx.fillStyle = this.isStunned ? '#00ffff' : (this.isInvulnerable ? '#00ffff' : '#8a2be2');
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        // Escudo Visual ao defender
+        if (this.isBlocking) {
+            ctx.strokeStyle = this.parryWindow > 0 ? '#ffffff' : '#00ffff';
+            ctx.lineWidth = 4;
+            const shieldX = this.facing === 1 ? this.x + this.width + 2 : this.x - 10;
+            ctx.beginPath();
+            ctx.arc(shieldX, this.y + this.height / 2, 22, -Math.PI / 2, Math.PI / 2, this.facing === -1);
+            ctx.stroke();
+        }
+
+        // Aura do poder supremo
+        if (this.isChargingSuper) {
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(this.x + 16, this.y + 24, this.superChargeTimer * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Olho
+        ctx.fillStyle = '#00ffff';
+        const eyeX = this.facing === 1 ? this.x + 22 : this.x + 4;
+        ctx.fillRect(eyeX, this.y + 10, 6, 4);
+
+        // Espada
+        if (this.isAttacking) {
+            ctx.fillStyle = '#00ffff';
+            const arcX = this.facing === 1 ? this.x + this.width : this.x - 45;
+            ctx.fillRect(arcX, this.y - 10, 45, this.height + 20);
+        }
+
+        ctx.restore();
+    }
+}
