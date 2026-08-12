@@ -529,3 +529,4 @@ function gameLoop() {
 }
 
 gameLoop();
+const keys = { a: false, d: false, w: false, space: false, shift: false, j: false, k: false, l: false, r: false };
